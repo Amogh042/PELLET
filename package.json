@@ -1,0 +1,14 @@
+{
+  "name": "pellet",
+  "productName": "PELLET",
+  "version": "1.0.0",
+  "description": "Retro-arcade task manager for macOS",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^45.3.1"
+  }
+}

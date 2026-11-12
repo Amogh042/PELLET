@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:">
+  <title>PELLET</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Window drag strip (the title bar is hidden) -->
+  <div class="dragbar"></div>
+
+  <!-- Launch screen -->
+  <div class="splash" id="splash">
+    <div class="splash-track" id="splashTrack">
+      <span class="chomper splash-chomper"></span>
+    </div>
+    <div class="splash-title">PELLET</div>
+  </div>
+
+  <div class="app" id="app">
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar">
+      <div class="logo">
+        <span class="chomper chomper--idle"></span>
+        <h1>PELLET</h1>
+      </div>
+
+      <section class="box level-box">
+        <div class="level-badge" id="levelBadge">
+          <span class="label">LEVEL</span>
+          <span class="level-num" id="levelNum">01</span>
+        </div>
+        <div class="xp-head">
+          <span class="label">XP</span>
+          <span class="xp-text" id="xpText">0/100</span>
+        </div>
+        <div class="xp-bar" id="xpBar" aria-hidden="true"></div>
+      </section>
+
+      <section class="box streak-box">
+        <span class="flame" id="flame" aria-hidden="true"></span>
+        <div class="streak-info">
+          <span class="streak-num" id="streakNum">0</span>
+          <span class="label">DAY STREAK</span>
+        </div>
+      </section>
+
+      <nav class="filters" id="filters">
+        <button class="filter is-active" data-filter="all">
+          <span class="filter-name">ALL</span><span class="filter-count" data-count="all">0</span>
+        </button>
+        <button class="filter" data-filter="today">
+          <span class="filter-name">TODAY</span><span class="filter-count" data-count="today">0</span>
+        </button>
+        <button class="filter" data-filter="overdue">
+          <span class="filter-name">OVERDUE</span><span class="filter-count" data-count="overdue">0</span>
+        </button>
+        <button class="filter" data-filter="done">
+          <span class="filter-name">DONE</span><span class="filter-count" data-count="done">0</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-foot label">CMD+N = NEW TASK</div>
+    </aside>
+
+    <!-- CENTER -->
+    <main class="center">
+      <button class="btn-create" id="createBtn">+ CREATE TASK</button>
+      <ul class="task-list" id="taskList"></ul>
+      <div class="empty" id="empty" hidden>
+        <div class="empty-title" id="emptyTitle">ALL CLEAR</div>
+        <p class="empty-text" id="emptyText">Nothing queued. Press CMD+N to add a task.</p>
+      </div>
+    </main>
+
+    <!-- RIGHT PANEL (dashboard goes here) -->
+    <aside class="dash" id="dashboard">
+      <h2 class="col-title">DASHBOARD</h2>
+      <div class="dash-placeholder">
+        <div class="dash-blink">COMING SOON</div>
+        <p>Stats will load here.</p>
+      </div>
+    </aside>
+  </div>
+
+  <!-- CREATE TASK MODAL -->
+  <div class="modal-backdrop" id="modal" hidden>
+    <form class="modal" id="taskForm" novalidate autocomplete="off">
+      <header class="modal-head">
+        <h2>NEW TASK</h2>
+        <button type="button" class="icon-btn" id="modalClose" aria-label="Close">X</button>
+      </header>
+
+      <label class="field">
+        <span class="label">TITLE</span>
+        <input class="input" type="text" id="fTitle" maxlength="120" placeholder="What needs doing?" autofocus>
+      </label>
+
+      <div class="field">
+        <span class="label">PRIORITY</span>
+        <div class="prio-group" id="prioGroup" role="radiogroup" aria-label="Priority">
+          <button type="button" class="prio prio--low is-selected" data-priority="low" role="radio" aria-checked="true">LOW</button>
+          <button type="button" class="prio prio--high" data-priority="high" role="radio" aria-checked="false">HIGH</button>
+          <button type="button" class="prio prio--extreme" data-priority="extreme" role="radio" aria-checked="false">EXTREME</button>
+        </div>
+      </div>
+
+      <label class="field">
+        <span class="label">DUE DATE</span>
+        <input class="input" type="datetime-local" id="fDue">
+      </label>
+
+      <label class="checkbox is-disabled" id="reminderRow">
+        <input type="checkbox" id="fReminder" disabled>
+        <span class="checkbox-box"></span>
+        <span class="checkbox-text" id="reminderText">Set a due date to enable a reminder</span>
+      </label>
+
+      <footer class="modal-foot">
+        <span class="label">ENTER = SAVE &nbsp; ESC = CLOSE</span>
+        <button type="submit" class="btn-primary">ADD TASK</button>
+      </footer>
+    </form>
+  </div>
+
+  <!-- CRT scanlines, always on top -->
+  <div class="crt"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

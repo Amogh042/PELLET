@@ -78,14 +78,60 @@
       </div>
     </main>
 
-    <!-- RIGHT PANEL (dashboard goes here) -->
+    <!-- RIGHT PANEL: DASHBOARD -->
     <aside class="dash" id="dashboard">
       <h2 class="col-title">DASHBOARD</h2>
-      <div class="dash-placeholder">
-        <div class="dash-blink">COMING SOON</div>
-        <p>Stats will load here.</p>
-      </div>
+
+      <section class="stat-card">
+        <h3 class="stat-head">TASKS CRUSHED</h3>
+        <div class="stat-pair">
+          <div class="stat"><span class="stat-num" id="dCrushedToday">0</span><span class="label">TODAY</span></div>
+          <div class="stat"><span class="stat-num stat-num--amber" id="dCrushedAll">0</span><span class="label">ALL-TIME</span></div>
+        </div>
+      </section>
+
+      <section class="stat-card">
+        <h3 class="stat-head">STREAK</h3>
+        <div class="stat-pair">
+          <div class="stat"><span class="stat-num" id="dStreak">0</span><span class="label">CURRENT</span></div>
+          <div class="stat"><span class="stat-num stat-num--amber" id="dBest">0</span><span class="label">BEST</span></div>
+        </div>
+      </section>
+
+      <section class="stat-card" id="dComboCard">
+        <h3 class="stat-head">COMBO</h3>
+        <div class="combo-row">
+          <span class="stat-num" id="dCombo">x1</span>
+          <span class="label" id="dComboTime">IDLE</span>
+        </div>
+        <div class="drain" id="dComboBar" aria-hidden="true"></div>
+      </section>
+
+      <section class="stat-card">
+        <h3 class="stat-head">LAST 7 DAYS</h3>
+        <div class="history" id="dHistory"></div>
+        <div class="hist-days" id="dHistoryDays"></div>
+        <div class="label hist-scale" id="dHistoryScale">1 BLOCK = 1 TASK</div>
+      </section>
+
+      <section class="stat-card stat-card--haul">
+        <h3 class="stat-head">TODAY'S HAUL</h3>
+        <div class="haul"><span class="stat-num stat-num--big" id="dHaul">0</span><span class="haul-unit">XP</span></div>
+      </section>
     </aside>
+  </div>
+
+  <!-- COMBO HUD: bottom-right corner of the task column -->
+  <div class="combo-hud" id="comboHud" hidden>
+    <div class="combo-hud-top">
+      <span class="label">COMBO</span>
+      <span class="combo-mult" id="comboMult">x1</span>
+    </div>
+    <div class="drain" id="comboBar" aria-hidden="true"></div>
+    <div class="combo-hud-foot">
+      <span class="label" id="comboSecs">90S</span>
+      <span class="label" id="comboNext">NEXT x2</span>
+    </div>
   </div>
 
   <!-- CREATE TASK MODAL -->

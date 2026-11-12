@@ -3,12 +3,15 @@
 
   const api = window.pellet;
 
-  const XP_PER_LEVEL = 100;
   const XP_PELLETS = 20;
   const SPLASH_PELLETS = 12;
   const SPLASH_MS = 1500;
+  const COMBO_WINDOW_MS = 90 * 1000; // must match main.js
+  const DRAIN_SEGMENTS = 15;
+  const HISTORY_ROWS = 6;
   const PRIORITY_RANK = { extreme: 3, high: 2, low: 1 };
   const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
   const EMPTY_COPY = {
     all: ['ALL CLEAR', 'Nothing queued. Press CMD+N to add a task.'],
@@ -59,14 +62,48 @@
     fReminder: $('#fReminder'),
     reminderRow: $('#reminderRow'),
     reminderText: $('#reminderText'),
+    // dashboard
+    dCrushedToday: $('#dCrushedToday'),
+    dCrushedAll: $('#dCrushedAll'),
+    dStreak: $('#dStreak'),
+    dBest: $('#dBest'),
+    dComboCard: $('#dComboCard'),
+    dCombo: $('#dCombo'),
+    dComboTime: $('#dComboTime'),
+    dComboBar: $('#dComboBar'),
+    dHistory: $('#dHistory'),
+    dHistoryDays: $('#dHistoryDays'),
+    dHistoryScale: $('#dHistoryScale'),
+    dHaul: $('#dHaul'),
+    // combo HUD
+    comboHud: $('#comboHud'),
+    comboMult: $('#comboMult'),
+    comboBar: $('#comboBar'),
+    comboSecs: $('#comboSecs'),
+    comboNext: $('#comboNext'),
   };
 
-  let state = { tasks: [], stats: { xp: 0, streak: 0, lastCompletedDay: null } };
+  let state = {
+    tasks: [],
+    stats: {
+      xp: 0,
+      streak: 0,
+      bestStreak: 0,
+      lastCompletionDate: null,
+      streakLost: null,
+      combo: { count: 0, lastAt: null },
+      totalCompleted: 0,
+      history: {},
+    },
+  };
   let filter = 'all';
   let selectedPriority = 'low';
   let justAddedId = null;
   let shownPellets = null; // null until the first paint, so nothing pops on load
+  let shownCombo = 0;      // multiplier currently on screen, to detect a bump
   let submitting = false;
+  let ackingStreak = false;
+  let splashDone = false;  // effects wait until the launch screen is gone
   const leaving = new Set(); // task ids whose cards are mid-animation
 
   // ------------------------------------------------------------- helpers --
@@ -76,6 +113,17 @@
     if (className) node.className = className;
     if (text != null) node.textContent = text;
     return node;
+  }
+
+  function setText(node, value) {
+    const text = String(value);
+    if (node.textContent !== text) node.textContent = text;
+  }
+
+  function replay(node, className) {
+    node.classList.remove(className);
+    void node.offsetWidth; // restart the animation
+    node.classList.add(className);
   }
 
   const pad2 = (n) => String(n).padStart(2, '0');
@@ -110,7 +158,16 @@
     return el('span', 'chip chip--due', shortDate(task.due, true));
   }
 
-  const levelOf = (xp) => Math.floor(xp / XP_PER_LEVEL) + 1;
+  // level = floor(sqrt(totalXP / 50)) + 1, so level L starts at 50 * (L - 1)^2 XP.
+  const levelOf = (xp) => Math.floor(Math.sqrt(xp / 50)) + 1;
+  const levelStart = (level) => 50 * (level - 1) ** 2;
+
+  function comboNow() {
+    const combo = state.stats.combo || {};
+    const remaining = combo.lastAt ? COMBO_WINDOW_MS - (Date.now() - combo.lastAt) : 0;
+    const live = remaining > 0 && combo.count >= 1;
+    return { live, count: live ? combo.count : 1, remaining: live ? remaining : 0 };
+  }
 
   // -------------------------------------------------------------- queries --
 
@@ -162,6 +219,7 @@
     chips.append(el('span', `chip chip--${task.priority}`, task.priority.toUpperCase()));
     if (task.done) {
       chips.append(el('span', 'chip chip--done', `DONE ${shortDate(task.completedAt || Date.now(), false)}`));
+      if (task.xpAwarded != null) chips.append(el('span', 'chip chip--today', `+${task.xpAwarded} XP`));
     } else {
       const due = dueChip(task);
       if (due) chips.append(due);
@@ -189,32 +247,27 @@
   }
 
   function renderSidebar() {
-    const { xp, streak, lastCompletedDay } = state.stats;
-    const intoLevel = xp % XP_PER_LEVEL;
-    const lit = Math.floor((intoLevel / XP_PER_LEVEL) * XP_PELLETS);
+    const { xp, streak } = state.stats;
+    const level = levelOf(xp);
+    const start = levelStart(level);
+    const span = levelStart(level + 1) - start;
+    const into = xp - start;
+    const lit = Math.floor((into / span) * XP_PELLETS);
 
-    dom.levelNum.textContent = pad2(levelOf(xp));
-    dom.xpText.textContent = `${intoLevel}/${XP_PER_LEVEL}`;
+    dom.levelNum.textContent = pad2(level);
+    dom.xpText.textContent = `${into}/${span}`;
 
     [...dom.xpBar.children].forEach((dot, i) => {
       const on = i < lit;
       const wasOn = dot.classList.contains('is-on');
       dot.classList.toggle('is-on', on);
       dot.classList.remove('is-pop');
-      if (on && !wasOn && shownPellets !== null) {
-        void dot.offsetWidth; // restart the animation
-        dot.classList.add('is-pop');
-      }
+      if (on && !wasOn && shownPellets !== null) replay(dot, 'is-pop');
     });
     shownPellets = lit;
 
-    // A streak only counts while it's alive: last clear was today or yesterday.
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const alive = lastCompletedDay === dayKey(new Date()) || lastCompletedDay === dayKey(yesterday);
-    const shown = alive ? streak : 0;
-    dom.streakNum.textContent = String(shown);
-    dom.flame.classList.toggle('is-lit', shown > 0);
+    dom.streakNum.textContent = String(streak);
+    dom.flame.classList.toggle('is-lit', streak > 0);
 
     for (const name of ['all', 'today', 'overdue', 'done']) {
       const count = tasksFor(name).length;
@@ -227,9 +280,96 @@
     }
   }
 
+  function setStat(node, value) {
+    const text = String(value);
+    if (node.textContent === text) return;
+    const first = node.dataset.ready !== '1';
+    node.textContent = text;
+    node.dataset.ready = '1';
+    if (!first) replay(node, 'is-bump');
+  }
+
+  function renderDashboard() {
+    const { stats } = state;
+    const history = stats.history || {};
+    const today = history[dayKey(new Date())] || { count: 0, xp: 0 };
+
+    setStat(dom.dCrushedToday, today.count);
+    setStat(dom.dCrushedAll, stats.totalCompleted || 0);
+    setStat(dom.dStreak, stats.streak || 0);
+    setStat(dom.dBest, stats.bestStreak || 0);
+    setStat(dom.dHaul, today.xp);
+
+    // Last 7 days, oldest on the left, today on the right.
+    const days = [];
+    for (let back = 6; back >= 0; back -= 1) {
+      const d = new Date();
+      d.setDate(d.getDate() - back);
+      days.push({
+        letter: DAY_LETTERS[d.getDay()],
+        count: history[dayKey(d)]?.count || 0,
+        isToday: back === 0,
+      });
+    }
+
+    // One block per task; on a huge day each block stands for several.
+    const peak = Math.max(...days.map((d) => d.count));
+    const perBlock = Math.max(1, Math.ceil(peak / HISTORY_ROWS));
+
+    dom.dHistory.replaceChildren(
+      ...days.map((day) => {
+        const col = el('div', `hist-col${day.isToday ? ' is-today' : ''}`);
+        const stack = el('div', 'hist-stack');
+        const blocks = Math.ceil(day.count / perBlock);
+        for (let i = 0; i < blocks; i += 1) stack.append(el('i', 'hist-block'));
+        if (day.count) stack.append(el('span', 'hist-count', String(day.count)));
+        col.append(stack);
+        return col;
+      })
+    );
+    dom.dHistoryDays.replaceChildren(
+      ...days.map((day) => el('span', `hist-day${day.isToday ? ' is-today' : ''}`, day.letter))
+    );
+    dom.dHistoryScale.textContent =
+      perBlock === 1 ? '1 BLOCK = 1 TASK' : `1 BLOCK = ${perBlock} TASKS`;
+  }
+
+  function paintDrain(bar, remaining) {
+    const on = Math.ceil((remaining / COMBO_WINDOW_MS) * DRAIN_SEGMENTS);
+    if (bar.dataset.on !== String(on)) {
+      bar.dataset.on = String(on);
+      [...bar.children].forEach((seg, i) => seg.classList.toggle('is-on', i < on));
+    }
+    bar.classList.toggle('is-low', remaining > 0 && remaining <= 15 * 1000);
+  }
+
+  // Runs several times a second so the countdown bars drain live.
+  function renderCombo() {
+    const { live, count, remaining } = comboNow();
+    const secs = `${Math.ceil(remaining / 1000)}S`;
+
+    dom.comboHud.hidden = !live;
+    setText(dom.comboMult, `x${count}`);
+    setText(dom.comboSecs, secs);
+    setText(dom.comboNext, `NEXT x${count + 1}`);
+    paintDrain(dom.comboBar, remaining);
+
+    dom.dComboCard.classList.toggle('is-live', live);
+    setText(dom.dCombo, `x${count}`);
+    setText(dom.dComboTime, live ? secs : 'IDLE');
+    paintDrain(dom.dComboBar, remaining);
+
+    const shown = live ? count : 0;
+    if (shown > shownCombo && shown >= 2) replay(dom.comboHud, 'is-bump');
+    shownCombo = shown;
+  }
+
   function render() {
     renderSidebar();
     renderList();
+    renderDashboard();
+    renderCombo();
+    showStreakLostIfNeeded();
   }
 
   // Never repaint the list under a card that is mid-animation; the animation's
@@ -237,6 +377,60 @@
   function applyState(next) {
     state = next;
     if (leaving.size === 0) render();
+  }
+
+  // -------------------------------------------------------------- effects --
+
+  function spawnXpPop(rect, amount, combo) {
+    if (!(amount > 0)) return;
+    const pop = el('div', `xp-pop${combo > 1 ? ' is-combo' : ''}`, `+${amount} XP`);
+    // Start just above the circle so it never sits on top of the title.
+    pop.style.left = `${rect.left - 4}px`;
+    pop.style.top = `${rect.top - 22}px`;
+    pop.addEventListener('animationend', () => pop.remove());
+    document.body.append(pop);
+  }
+
+  function levelUpFx(level) {
+    const fx = el('div', 'levelup');
+    fx.append(
+      el('div', 'levelup-ring'),
+      el('div', 'levelup-ring levelup-ring--echo'),
+      el('div', 'levelup-text', 'LEVEL UP'),
+      el('div', 'levelup-sub', `LEVEL ${pad2(level)}`)
+    );
+    document.body.append(fx);
+    setTimeout(() => fx.remove(), 1400);
+
+    replay(dom.levelBadge, 'is-levelup');
+  }
+
+  // main.js records a broken streak in stats.streakLost; show it once, then clear it.
+  function showStreakLostIfNeeded() {
+    const lost = state.stats.streakLost;
+    if (!lost || ackingStreak || !splashDone) return;
+    ackingStreak = true;
+
+    const fx = el('div', 'streak-lost');
+    const box = el('div', 'streak-lost-box');
+    box.append(
+      el('div', 'streak-lost-text', 'STREAK LOST'),
+      el('div', 'label', `${lost} DAY RUN ENDED`)
+    );
+    fx.append(box);
+    document.body.append(fx);
+    setTimeout(() => fx.remove(), 2250);
+
+    api
+      .ackStreakLost()
+      .then((next) => {
+        ackingStreak = false;
+        applyState(next);
+      })
+      .catch((err) => {
+        console.error(err);
+        ackingStreak = false;
+      });
   }
 
   // -------------------------------------------------------------- actions --
@@ -248,22 +442,11 @@
     card.style.height = '0px';
   }
 
-  function spawnXpPop(rect, amount) {
-    if (!(amount > 0)) return;
-    const pop = el('div', 'xp-pop', `+${amount} XP`);
-    // Start just above the circle so it never sits on top of the title.
-    pop.style.left = `${rect.left - 4}px`;
-    pop.style.top = `${rect.top - 20}px`;
-    pop.addEventListener('animationend', () => pop.remove());
-    document.body.append(pop);
-  }
-
   async function completeTask(id, card) {
     if (leaving.has(id)) return;
     leaving.add(id);
 
-    const xpBefore = state.stats.xp;
-    const levelBefore = levelOf(xpBefore);
+    const levelBefore = levelOf(state.stats.xp);
     const rect = card.querySelector('.check').getBoundingClientRect();
 
     card.classList.add('is-completing');
@@ -271,7 +454,10 @@
       console.error(err);
       return null;
     });
-    request.then((next) => next && spawnXpPop(rect, next.stats.xp - xpBefore));
+    request.then((next) => {
+      const done = next && next.tasks.find((t) => t.id === id);
+      if (done) spawnXpPop(rect, done.xpAwarded, done.combo);
+    });
 
     await sleep(180); // ring fills, pops and flashes
     collapse(card);
@@ -282,11 +468,8 @@
     if (next) state = next;
     render();
 
-    if (levelOf(state.stats.xp) > levelBefore) {
-      dom.levelBadge.classList.remove('is-levelup');
-      void dom.levelBadge.offsetWidth;
-      dom.levelBadge.classList.add('is-levelup');
-    }
+    const levelAfter = levelOf(state.stats.xp);
+    if (levelAfter > levelBefore) levelUpFx(levelAfter);
   }
 
   async function deleteTask(id, card) {
@@ -359,9 +542,7 @@
 
     const title = dom.fTitle.value.trim();
     if (!title) {
-      dom.fTitle.classList.remove('is-invalid');
-      void dom.fTitle.offsetWidth;
-      dom.fTitle.classList.add('is-invalid');
+      replay(dom.fTitle, 'is-invalid');
       dom.fTitle.focus();
       return;
     }
@@ -443,17 +624,24 @@
   api.onOpenCreate(openModal);
   api.onStateChanged(applyState);
 
-  // Due chips drift into TODAY / OVERDUE as time passes.
+  // Due chips drift into TODAY / OVERDUE as time passes, and the dashboard
+  // rolls over at midnight.
   const refresh = () => {
     if (leaving.size === 0) render();
   };
   setInterval(refresh, 30 * 1000);
   window.addEventListener('focus', refresh);
 
+  setInterval(renderCombo, 200);
+
   // ------------------------------------------------------- static sprites --
 
   function buildXpBar() {
     for (let i = 0; i < XP_PELLETS; i += 1) dom.xpBar.append(el('span', 'xp-dot'));
+  }
+
+  function buildDrain(bar) {
+    for (let i = 0; i < DRAIN_SEGMENTS; i += 1) bar.append(el('i'));
   }
 
   function buildFlame() {
@@ -505,14 +693,20 @@
 
   async function boot() {
     buildXpBar();
+    buildDrain(dom.comboBar);
+    buildDrain(dom.dComboBar);
     buildFlame();
-    runSplash();
+    const splash = runSplash();
     try {
       state = await api.getState();
     } catch (err) {
       console.error(err);
     }
     render();
+    // A STREAK LOST banner must not be spent behind the launch screen.
+    await splash;
+    splashDone = true;
+    showStreakLostIfNeeded();
   }
 
   boot();
